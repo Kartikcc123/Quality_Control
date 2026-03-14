@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyTorch model files (uncomment if you want to exclude the model)
+# *.pth
+# *.pt
+
+# Dataset
+dataset/
+tilda400/
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.webp
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local

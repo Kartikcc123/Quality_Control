@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fabric Defect Detection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .upload-section {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-section:hover {
+            background: #f0f4ff;
+            border-color: #764ba2;
+        }
+
+        .upload-section input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 50px;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .preview-container {
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .preview-container.active {
+            display: block;
+        }
+
+        .preview-container img {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 10px;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 25px;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .result-section {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 15px;
+            background: #f8f9fa;
+        }
+
+        .result-section.active {
+            display: block;
+        }
+
+        .result-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .result-class {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .result-confidence {
+            font-size: 24px;
+            color: #333;
+            margin-top: 10px;
+        }
+
+        .probabilities {
+            margin-top: 20px;
+        }
+
+        .probability-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .probability-label {
+            width: 120px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .probability-bar-container {
+            flex: 1;
+            background: #e0e0e0;
+            height: 25px;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 0 10px;
+        }
+
+        .probability-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 12px;
+            transition: width 0.5s ease;
+        }
+
+        .probability-value {
+            width: 60px;
+            text-align: right;
+            color: #555;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .camera-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+        }
+
+        .camera-section h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        #videoElement {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 10px;
+            display: none;
+            margin-bottom: 15px;
+        }
+
+        #videoElement.active {
+            display: block;
+        }
+
+        .camera-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .camera-btn {
+            flex: 1;
+            padding: 10px;
+            font-size: 14px;
+        }
+
+        .api-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            background: #4caf50;
+            color: white;
+            font-weight: bold;
+        }
+
+        .api-status.error {
+            background: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="api-status" id="apiStatus">Checking API...</div>
+
+    <div class="container">
+        <h1>🔍 Fabric Defect Detection</h1>
+
+        <!-- File Upload Section -->
+        <div class="upload-section" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-icon">📁</div>
+            <p>Click to upload an image</p>
+            <p style="color: #999; font-size: 14px; margin-top: 5px;">Supports: JPEG, PNG, BMP, WEBP</p>
+            <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+        </div>
+
+        <!-- Image Preview -->
+        <div class="preview-container" id="previewContainer">
+            <img id="imagePreview" src="" alt="Preview">
+        </div>
+
+        <!-- Loading Spinner -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px;">Analyzing image...</p>
+        </div>
+
+        <!-- Result Section -->
+        <div class="result-section" id="resultSection">
+            <div class="result-header">
+                <div class="result-class" id="resultClass">-</div>
+                <div class="result-confidence" id="resultConfidence">-</div>
+            </div>
+            <div class="probabilities" id="probabilities"></div>
+        </div>
+
+        <button class="btn" id="predictBtn" onclick="predictFromFile()" disabled>Detect Defects</button>
+
+        <!-- Camera Section -->
+        <div class="camera-section">
+            <h3>📷 Real-time Camera Detection</h3>
+            <video id="videoElement" autoplay playsinline></video>
+            <div class="camera-controls">
+                <button class="btn camera-btn" onclick="startCamera()">Start Camera</button>
+                <button class="btn camera-btn" onclick="stopCamera()">Stop Camera</button>
+                <button class="btn camera-btn" onclick="captureAndPredict()">Capture & Detect</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let selectedFile = null;
+        let videoStream = null;
+
+        // Check API status on load
+        async function checkApiStatus() {
+            const statusEl = document.getElementById('apiStatus');
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                if (response.ok) {
+                    statusEl.textContent = '✓ API Connected';
+                    statusEl.classList.remove('error');
+                } else {
+                    throw new Error('API error');
+                }
+            } catch (error) {
+                statusEl.textContent = '✗ API Not Connected';
+                statusEl.classList.add('error');
+            }
+        }
+
+        checkApiStatus();
+        setInterval(checkApiStatus, 5000);
+
+        // Handle file selection
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                selectedFile = file;
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('imagePreview').src = e.target.result;
+                    document.getElementById('previewContainer').classList.add('active');
+                    document.getElementById('predictBtn').disabled = false;
+                    document.getElementById('resultSection').classList.remove('active');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Predict from file upload
+        async function predictFromFile() {
+            if (!selectedFile) return;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('resultSection').classList.remove('active');
+
+            try {
+                const response = await fetch(`${API_BASE}/predict/file`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Prediction failed');
+                }
+
+                const result = await response.json();
+                displayResult(result);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                document.getElementById('loading').classList.remove('active');
+            }
+        }
+
+        // Display prediction result
+        function displayResult(result) {
+            document.getElementById('resultClass').textContent = result.predicted_class.toUpperCase();
+            document.getElementById('resultConfidence').textContent = 
+                `Confidence: ${(result.confidence * 100).toFixed(2)}%`;
+
+            const probabilitiesDiv = document.getElementById('probabilities');
+            probabilitiesDiv.innerHTML = '';
+
+            for (const [className, prob] of Object.entries(result.probabilities)) {
+                const item = document.createElement('div');
+                item.className = 'probability-item';
+                item.innerHTML = `
+                    <div class="probability-label">${className}</div>
+                    <div class="probability-bar-container">
+                        <div class="probability-bar" style="width: ${prob * 100}%"></div>
+                    </div>
+                    <div class="probability-value">${(prob * 100).toFixed(2)}%</div>
+                `;
+                probabilitiesDiv.appendChild(item);
+            }
+
+            document.getElementById('resultSection').classList.add('active');
+        }
+
+        // Camera functions
+        async function startCamera() {
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                const video = document.getElementById('videoElement');
+                video.srcObject = videoStream;
+                video.classList.add('active');
+            } catch (error) {
+                alert('Error accessing camera: ' + error.message);
+            }
+        }
+
+        function stopCamera() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+            document.getElementById('videoElement').classList.remove('active');
+        }
+
+        async function captureAndPredict() {
+            const video = document.getElementById('videoElement');
+            if (!video.srcObject) {
+                alert('Please start the camera first');
+                return;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+
+            canvas.toBlob(async function(blob) {
+                const formData = new FormData();
+                formData.append('file', blob, 'frame.jpg');
+
+                document.getElementById('loading').classList.add('active');
+                document.getElementById('resultSection').classList.remove('active');
+
+                try {
+                    const response = await fetch(`${API_BASE}/predict/file`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Prediction failed');
+                    }
+
+                    const result = await response.json();
+                    displayResult(result);
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                } finally {
+                    document.getElementById('loading').classList.remove('active');
+                }
+            }, 'image/jpeg');
+        }
+
+        // Base64 example (for advanced use)
+        async function predictFromBase64(base64String) {
+            try {
+                const response = await fetch(`${API_BASE}/predict/base64`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ image: base64String })
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Error:', error);
+                throw error;
+            }
+        }
+    </script>
+</body>
+</html>
