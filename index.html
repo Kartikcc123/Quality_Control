@@ -215,12 +215,25 @@
             display: flex;
             gap: 10px;
             margin-bottom: 15px;
+            flex-wrap: wrap;
         }
 
         .camera-btn {
             flex: 1;
             padding: 10px;
             font-size: 14px;
+            min-width: 120px;
+        }
+
+        .camera-btn.active {
+            background: #4caf50;
+        }
+
+        .camera-info {
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
         }
 
         .api-status {
@@ -272,23 +285,28 @@
         <button class="btn" id="predictBtn" onclick="predictFromFile()" disabled>Detect Defects</button>
 
         <div class="camera-section">
-            <h3>📷 Real-time Camera Detection</h3>
+            <h3>📷 Real-time Fabric Defect Detection</h3>
+            <p style="color: #666; margin-bottom: 15px;">This camera detects fabric defects only (good quality, holes, objects, oil spots, thread errors)</p>
             <video id="videoElement" autoplay playsinline></video>
+            <div class="camera-info" id="cameraInfo">Camera: Not active</div>
             <div class="camera-controls">
-                <button class="btn camera-btn" onclick="startCamera()">Start Camera</button>
-                <button class="btn camera-btn" onclick="stopCamera()">Stop Camera</button>
-                <button class="btn camera-btn" onclick="captureAndPredict()">Capture & Detect</button>
+                <button class="btn camera-btn" onclick="startCamera('user')" id="frontCamBtn">📸 Front Camera</button>
+                <button class="btn camera-btn" onclick="startCamera('environment')" id="backCamBtn">📷 Rear Camera</button>
+                <button class="btn camera-btn" onclick="stopCamera()">⏹ Stop</button>
+                <button class="btn camera-btn" onclick="captureAndPredict()">🔍 Detect Fabric</button>
             </div>
         </div>
     </div>
 
     <script>
-        // CRITICAL FIX: Empty API_BASE uses relative paths. 
-        // This ensures it works perfectly on both localhost and Render automatically.
-        const API_BASE = ''; 
+        // Detect if we're on localhost or production
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        // Use relative paths in production (served by FastAPI), explicit port for local development
+        const API_BASE = isLocalhost ? 'http://127.0.0.1:8000' : ''; 
         
         let selectedFile = null;
         let videoStream = null;
+        let currentFacingMode = 'user'; // 'user' = front camera, 'environment' = rear camera
 
         // Check API status on load
         async function checkApiStatus() {
@@ -383,18 +401,52 @@
             document.getElementById('resultSection').classList.add('active');
         }
 
-        // Camera functions
-        async function startCamera() {
+        // Camera functions - supports front and rear camera switching
+        async function startCamera(facingMode = 'user') {
+            // Stop any existing stream first
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+            }
+            
+            currentFacingMode = facingMode;
+            
+            // Update button states
+            document.getElementById('frontCamBtn').classList.remove('active');
+            document.getElementById('backCamBtn').classList.remove('active');
+            
+            if (facingMode === 'user') {
+                document.getElementById('frontCamBtn').classList.add('active');
+            } else {
+                document.getElementById('backCamBtn').classList.add('active');
+            }
+            
             try {
-                videoStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { width: 640, height: 480 } 
-                });
+                // Request specific camera based on facingMode
+                const constraints = {
+                    video: { 
+                        facingMode: facingMode,
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    },
+                    audio: false
+                };
+                
+                videoStream = await navigator.mediaDevices.getUserMedia(constraints);
                 const video = document.getElementById('videoElement');
                 video.srcObject = videoStream;
                 video.classList.add('active');
+                
+                const cameraLabel = facingMode === 'user' ? 'Front Camera (Selfie)' : 'Rear Camera (Main)';
+                document.getElementById('cameraInfo').textContent = 'Camera: ' + cameraLabel + ' - Active';
             } catch (error) {
-                alert('Error accessing camera: ' + error.message);
+                console.error('Camera error:', error);
+                alert('Error accessing camera: ' + error.message + '\n\nMake sure you have granted camera permissions.');
             }
+        }
+
+        function switchCamera() {
+            const newFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            startCamera(newFacingMode);
         }
 
         function stopCamera() {
@@ -403,12 +455,15 @@
                 videoStream = null;
             }
             document.getElementById('videoElement').classList.remove('active');
+            document.getElementById('cameraInfo').textContent = 'Camera: Not active';
+            document.getElementById('frontCamBtn').classList.remove('active');
+            document.getElementById('backCamBtn').classList.remove('active');
         }
 
         async function captureAndPredict() {
             const video = document.getElementById('videoElement');
             if (!video.srcObject) {
-                alert('Please start the camera first');
+                alert('Please start the camera first by clicking Front Camera or Rear Camera');
                 return;
             }
 
@@ -419,10 +474,14 @@
 
             canvas.toBlob(async function(blob) {
                 const formData = new FormData();
-                formData.append('file', blob, 'frame.jpg');
+                formData.append('file', blob, 'fabric_frame.jpg');
 
                 document.getElementById('loading').classList.add('active');
                 document.getElementById('resultSection').classList.remove('active');
+                document.querySelector('.loading p').textContent = 'Detecting fabric defects...';
+
+                // Show that we're analyzing fabric
+                document.querySelector('.loading p').textContent = 'Analyzing fabric for defects...';
 
                 try {
                     const response = await fetch(`${API_BASE}/predict/file`, {
