@@ -176,6 +176,10 @@ async def get_classes():
     """Get list of available defect classes"""
     return {"classes": CLASSES}
 
+@app.get("/")
+async def serve_html():
+    return FileResponse("index.html")
+
 
 @app.post("/predict/file", response_model=PredictionResponse)
 async def predict_from_file(file: UploadFile = File(...)):
