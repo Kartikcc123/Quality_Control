@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from PIL import Image
+from fastapi.responses import FileResponse
 
 
 # Model classes
@@ -149,18 +150,8 @@ class PredictionResponse(BaseModel):
 
 
 @app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "Fabric Defect Detection API",
-        "version": "1.0.0",
-        "endpoints": {
-            "predict_file": "/predict/file - POST (upload image file)",
-            "predict_base64": "/predict/base64 - POST (send base64 image)",
-            "health": "/health - GET (check if model is loaded)",
-            "classes": "/classes - GET (list available classes)"
-        }
-    }
+async def serve_html():
+    return FileResponse("index.html")
 
 
 @app.get("/health")
@@ -175,10 +166,6 @@ async def health_check():
 async def get_classes():
     """Get list of available defect classes"""
     return {"classes": CLASSES}
-
-@app.get("/")
-async def serve_html():
-    return FileResponse("index.html")
 
 
 @app.post("/predict/file", response_model=PredictionResponse)
