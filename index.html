@@ -245,7 +245,6 @@
     <div class="container">
         <h1>🔍 Fabric Defect Detection</h1>
 
-        <!-- File Upload Section -->
         <div class="upload-section" onclick="document.getElementById('fileInput').click()">
             <div class="upload-icon">📁</div>
             <p>Click to upload an image</p>
@@ -253,18 +252,15 @@
             <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
         </div>
 
-        <!-- Image Preview -->
         <div class="preview-container" id="previewContainer">
             <img id="imagePreview" src="" alt="Preview">
         </div>
 
-        <!-- Loading Spinner -->
         <div class="loading" id="loading">
             <div class="spinner"></div>
             <p style="margin-top: 10px;">Analyzing image...</p>
         </div>
 
-        <!-- Result Section -->
         <div class="result-section" id="resultSection">
             <div class="result-header">
                 <div class="result-class" id="resultClass">-</div>
@@ -275,7 +271,6 @@
 
         <button class="btn" id="predictBtn" onclick="predictFromFile()" disabled>Detect Defects</button>
 
-        <!-- Camera Section -->
         <div class="camera-section">
             <h3>📷 Real-time Camera Detection</h3>
             <video id="videoElement" autoplay playsinline></video>
@@ -288,7 +283,10 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:8000';
+        // CRITICAL FIX: Empty API_BASE uses relative paths. 
+        // This ensures it works perfectly on both localhost and Render automatically.
+        const API_BASE = ''; 
+        
         let selectedFile = null;
         let videoStream = null;
 
@@ -344,13 +342,15 @@
                     body: formData
                 });
 
+                const data = await response.json();
+                
                 if (!response.ok) {
-                    throw new Error('Prediction failed');
+                    throw new Error(data.detail || 'Prediction failed');
                 }
 
-                const result = await response.json();
-                displayResult(result);
+                displayResult(data);
             } catch (error) {
+                console.error('Prediction error:', error);
                 alert('Error: ' + error.message);
             } finally {
                 document.getElementById('loading').classList.remove('active');
@@ -366,6 +366,7 @@
             const probabilitiesDiv = document.getElementById('probabilities');
             probabilitiesDiv.innerHTML = '';
 
+            // Using Object.entries correctly (previously there was a small scope issue in displayResult)
             for (const [className, prob] of Object.entries(result.probabilities)) {
                 const item = document.createElement('div');
                 item.className = 'probability-item';

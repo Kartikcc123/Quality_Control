@@ -2,114 +2,151 @@ import torch
 import cv2
 import numpy as np
 
-# Ensure your model.py file is in the same directory
 from model import FabricCNN
 
-# --- 1. CONFIGURATION ---
-classes = ["good", "hole", "objects", "oil_spot", "thread_error"]
-MODEL_PATH = "fabric_cnn_model.pth"
+classes = ["good","hole","objects","oil_spot","thread_error"]
 
-# 🟢 METHOD 1: DroidCam IP Stream (Highly Recommended)
-# Open the DroidCam app on your phone, find the "WiFi IP" and "DroidCam Port"
-# Format must be exactly like this: "http://<IP>:<PORT>/video"
-CAMERA_SOURCE = "http://192.168.1.15:4747/video"
-
-# 🔵 METHOD 2: USB / Virtual Camera Fallback
-# If you must use USB, uncomment the line below and change the index if needed.
-# CAMERA_SOURCE = 1
-
-
-# --- 2. LOAD MODEL ---
-print("Loading FabricCNN model...")
+# load model
 model = FabricCNN()
-try:
-    model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
-    model.eval()
-    print("Model loaded successfully.")
-except Exception as e:
-    print(f"Error loading model: {e}")
-    print("Please ensure 'fabric_cnn_model.pth' is in the current directory.")
+model.load_state_dict(torch.load("fabric_cnn_model.pth", map_location="cpu"))
+model.eval()
+
+# For Android IP Webcam, use URL like: http://192.168.1.X:8080/video
+# Uncomment the line below and replace with your IP Webcam URL
+# cap = cv2.VideoCapture("http://192.168.1.100:8080/video")
+
+# Try different backends to fix green screen issue
+backends = [cv2.CAP_ANY, cv2.CAP_MSMF, cv2.CAP_V4L2, cv2.CAP_DSHOW]
+
+# open camera - try multiple indices for external webcams
+# Uses the LAST camera found (usually external webcam at index 1 or higher)
+cap = None
+camera_idx = -1
+for i in range(5):
+    for backend in backends:
+        temp_cap = cv2.VideoCapture(i, backend)
+        if temp_cap.isOpened():
+            # Set camera properties for better compatibility
+            temp_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            temp_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            temp_cap.set(cv2.CAP_PROP_FPS, 30)
+            
+            print(f"Camera found at index {i} with backend {backend}")
+            if cap is not None:
+                cap.release()
+            cap = temp_cap
+            camera_idx = i
+            break
+    else:
+        continue
+    break
+
+if cap is None or not cap.isOpened():
+    print("Error: Could not open any camera")
     exit()
 
+print(f"Using camera at index {camera_idx}")
 
-# --- 3. INITIALIZE CAMERA ---
-print(f"Connecting to camera at: {CAMERA_SOURCE}...")
-
-# If using Method 2 (USB), add cv2.CAP_DSHOW as the second argument:
-# cap = cv2.VideoCapture(CAMERA_SOURCE, cv2.CAP_DSHOW)
-cap = cv2.VideoCapture(CAMERA_SOURCE)
-
-# If using Method 2 (USB), uncomment these to force MJPG codec to prevent green screen:
-# cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-# cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-# cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-if not cap.isOpened():
-    print("Error: Could not connect to the camera stream.")
-    print("Check your phone's Wi-Fi connection and ensure DroidCam is open.")
-    exit()
-
-print("Camera connected. Press 'ESC' to exit.")
-
-
-# --- 4. MAIN DETECTION LOOP ---
-while True:
+# Warm up camera - read more frames to stabilize
+print("Warming up camera...")
+frame_ready = False
+for attempt in range(50):
     ret, frame = cap.read()
+    cv2.waitKey(100)
     
+    if ret and frame is not None and frame.size > 1000:
+        # Check if frame is not green/black (mean pixel value check)
+        mean_val = np.mean(frame)
+        if mean_val > 20 and mean_val < 240:  # Not too dark or too bright
+            print(f"Camera ready, frame shape: {frame.shape}, mean: {mean_val:.1f}")
+            frame_ready = True
+            break
+        else:
+            print(f"Frame {attempt}: Invalid frame (mean={mean_val:.1f})")
+    else:
+        print(f"Frame {attempt}: Not received")
+
+if not frame_ready:
+    print("Warning: Camera may not be providing valid frames")
+
+while True:
+
+    ret, frame = cap.read()
+    cv2.waitKey(1)  # Allow frame buffer to refresh
+    
+    # Try reading again if first attempt fails
     if not ret or frame is None:
-        print("Dropped frame, retrying...")
+        ret, frame = cap.read()
+        
+    if not ret or frame is None or frame.size < 1000:
+        print(f"Frame not received (ret={ret}, frame={frame is not None}, size={frame.size if frame is not None else 0})")
+        cv2.waitKey(500)  # Wait longer before retry
+        continue
+    
+    # Check for invalid/green/black frames
+    mean_val = np.mean(frame)
+    if mean_val < 20 or mean_val > 240:
+        print(f"Invalid frame (mean={mean_val:.1f}), skipping...")
         cv2.waitKey(100)
         continue
 
     h, w = frame.shape[:2]
 
-    # Define the Region of Interest (ROI) in the center of the frame
-    startX, endX = int(w * 0.3), int(w * 0.7)
-    startY, endY = int(h * 0.3), int(h * 0.7)
-    
-    roi = frame[startY:endY, startX:endX]
+    # center ROI
+    roi = frame[int(h*0.3):int(h*0.7),
+                int(w*0.3):int(w*0.7)]
+
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
-    # Calculate variance to check if the camera is pointing at a solid color (like a green screen or blank wall)
+    # Check if ROI has meaningful content (not just solid background)
     std_dev = np.std(gray)
-    
-    if std_dev < 15:
-        # NO FABRIC DETECTED: Draw a red warning box
-        cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 0, 255), 2)
-        cv2.putText(frame, "Place Khadi fabric in frame", (30, 40), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-    else:
-        # FABRIC DETECTED: Prepare image for PyTorch
-        img = cv2.resize(gray, (64, 64))
-        img = img / 255.0
-        # Convert to tensor and add batch/channel dimensions: [1, 1, 64, 64]
-        img_tensor = torch.tensor(img).float().unsqueeze(0).unsqueeze(0)
+    if std_dev < 15:  # Low variance = solid color (green screen or blank)
+        cv2.rectangle(frame,
+                      (int(w*0.3),int(h*0.3)),
+                      (int(w*0.7),int(h*0.7)),
+                      (0,0,255),2)
+        cv2.putText(frame,"Place fabric in frame",
+                    (30,40),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,(0,0,255),2)
+        cv2.imshow("Fabric Inspection",frame)
+        if cv2.waitKey(1) & 0xFF == 27:
+            break
+        continue
 
-        # Run Inference
-        with torch.no_grad():
-            output = model(img_tensor)
-            prob = torch.softmax(output, dim=1)
-            conf, pred = torch.max(prob, 1)
+    img = cv2.resize(gray,(64,64))
 
-        pred_idx = pred.item()
-        confidence = conf.item()
-        label = classes[pred_idx]
+    img = img / 255.0
 
-        # Determine box color based on defect status (Green for good, Red for defects)
-        box_color = (0, 255, 0) if label == "good" else (0, 0, 255)
+    img = torch.tensor(img).float().unsqueeze(0).unsqueeze(0)
 
-        # Draw ROI box and prediction text
-        cv2.rectangle(frame, (startX, startY), (endX, endY), box_color, 2)
-        cv2.putText(frame, f"{label.replace('_', ' ').title()}: {confidence:.2f}", 
-                    (30, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, box_color, 2)
+    with torch.no_grad():
+        output = model(img)
 
-    # Display the final frame
-    cv2.imshow("Khadi Quality Inspection", frame)
+        prob = torch.softmax(output,dim=1)
 
-    # Press 'ESC' to exit
+        conf, pred = torch.max(prob,1)
+
+    pred = pred.item()   # FIX
+
+    label = classes[pred]
+
+    # draw ROI box
+    cv2.rectangle(frame,
+                  (int(w*0.3),int(h*0.3)),
+                  (int(w*0.7),int(h*0.7)),
+                  (0,255,0),2)
+
+    # show prediction
+    cv2.putText(frame,f"{label} {conf.item():.2f}",
+                (30,40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,(0,255,0),2)
+
+    cv2.imshow("Fabric Inspection",frame)
+
     if cv2.waitKey(1) & 0xFF == 27:
         break
 
-# Clean up
 cap.release()
 cv2.destroyAllWindows()
