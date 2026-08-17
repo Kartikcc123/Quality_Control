@@ -15,8 +15,12 @@ env/
 # *.pth
 # *.pt
 
-# Dataset
+# Dataset & Archives
 dataset/
+data/
+*.zip
+*.tar
+*.gz
 tilda400/
 
 # Images

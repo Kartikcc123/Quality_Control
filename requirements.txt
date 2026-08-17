@@ -1,16 +1,23 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-
-# Core ML dependencies (CPU-only for faster deployment on Render)
-torch>=2.9.0
+# PyTorch GPU with CUDA 12.4 Support
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch
 torchvision
 
-# Other dependencies (Headless is CRITICAL for Linux servers)
-opencv-python-headless>=4.8.1.78
-numpy>=1.24.3
-Pillow>=10.1.0
+# Core Framework & YOLO Requirements
+ultralytics
+ipykernel
 
-# FastAPI dependencies
-fastapi>=0.104.1
-uvicorn>=0.24.0
-python-multipart>=0.0.6
-pydantic>=2.5.0
+# Image & Video Processing
+opencv-python
+pillow
+
+# Data Manipulation & Visualization
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+
+# Utilities
+pyyaml
+tqdm
